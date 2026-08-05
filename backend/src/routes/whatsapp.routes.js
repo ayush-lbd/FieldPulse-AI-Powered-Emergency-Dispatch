@@ -1,9 +1,12 @@
 import express from 'express';
-import { handleIncomingMessage } from '../controllers/whatsapp.controller.js';
+import { verifyWebhook, handleIncomingMessage } from '../controllers/whatsapp.controller.js';
 
 const router = express.Router();
 
-// POST /api/whatsapp
+// GET /api/whatsapp - Verification handshake required by Meta
+router.get('/', verifyWebhook);
+
+// POST /api/whatsapp - Incoming WhatsApp messages and media
 router.post('/', handleIncomingMessage);
 
 export default router;

@@ -13,10 +13,12 @@ app.use(cors({
 }));
 
 // Standard middleware to parse JSON and URL-encoded data
+// Meta sends JSON payloads for messages and events
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser());
 
+// Mount the WhatsApp routes
 app.use('/api/whatsapp', whatsappRoutes);
 
 app.get('/health', (req, res) => {
