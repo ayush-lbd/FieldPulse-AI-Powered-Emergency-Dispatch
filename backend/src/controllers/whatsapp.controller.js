@@ -1,7 +1,8 @@
+
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
-
+import { sendToWhatsAppQueue } from '../../queue.js';
 /**
  * GET /api/whatsapp
  * Meta Webhook Verification Handshake
@@ -44,6 +45,9 @@ export const handleIncomingMessage = asyncHandler(async (req, res) => {
         const messageType = message.type;
 
         console.log('\n--- New Incoming Meta WhatsApp Message ---');
+
+        sendToWhatsAppQueue(req.body);
+
         console.log('From:', senderNumber);
         console.log('Type:', messageType);
 

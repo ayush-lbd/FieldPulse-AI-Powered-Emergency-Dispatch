@@ -1,3 +1,4 @@
+import { connectQueue } from '../queue.js';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -6,6 +7,7 @@ import { ApiResponse } from './utils/ApiResponse.js';
 
 const app = express();
 
+connectQueue();
 // Security and parser middlewares
 app.use(cors({
     origin: process.env.CORS_ORIGIN || '*',
