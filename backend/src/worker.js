@@ -108,6 +108,12 @@ const processIncomingMessage = async (rawPayload) => {
             });
             console.log(`👤 Created new contact record for: ${phoneNumber}`);
         }
+        else if (contact.rescueStatus === 'safe') {
+            // Repeat victim facing a NEW danger! Reset their status to alert dispatchers.
+            contact.rescueStatus = 'pending';
+            await contact.save();
+            console.log(`🚨 Status reset to PENDING for repeat contact: ${phoneNumber}`);
+        }
 
         // 2. Prepare message fields
         let textContent = null;
