@@ -1,8 +1,12 @@
 import { Router } from 'express';
-import { getMessagesByContact } from '../controllers/message.controller.js';
+import { getMessagesByContact, sendManualReply } from '../controllers/message.controller.js';
 
 const router = Router();
 
-router.route('/:contactId').get(getMessagesByContact);
+// Fetch message history for the dashboard
+router.get('/:contactId', getMessagesByContact);
+
+// --- NEW: The missing route for the manual dispatcher reply! ---
+router.post('/:contactId/reply', sendManualReply);
 
 export default router;

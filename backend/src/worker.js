@@ -8,6 +8,7 @@ import { Contact } from './models/contact.model.js';
 import { Message } from './models/message.model.js';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
+import axios from 'axios';
 
 const socket = io('http://localhost:3000');
 socket.on('connect', () => {
@@ -45,34 +46,57 @@ const responseSchema = {
 };
 
 // --- NEW: The core AI processing function ---
-async function processMessageWithGemini(rawMessageText) {
-    console.log(`🧠 Sending to Gemini: "${rawMessageText}"`);
+// --- NEW: Updated AI Processing Function for Text, Audio, and Images ---
+async function processMessageWithGemini(contentsInput) {
+    console.log(`🧠 Sending content to Gemini...`);
 
-    const prompt = `
+    const systemInstruction = `
         You are a highly trained disaster management AI. 
-        Analyze the following distress message from a citizen and extract the critical information.
-        
-        Distress Message: "${rawMessageText}"
+        Analyze the incoming distress report (which could be text, an audio voice note, or an image) and extract the critical information into the requested JSON format.
     `;
 
     try {
+        // We pass the contents as an array so Gemini can read both text and media parts natively
+        const finalContents = [systemInstruction].concat(
+            Array.isArray(contentsInput) ? contentsInput : [contentsInput]
+        );
+
         const response = await ai.models.generateContent({
             model: 'gemini-3.6-flash',
-            contents: prompt,
+            contents: finalContents,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: responseSchema,
-                temperature: 0.2 // Low temperature for factual, consistent extraction
+                temperature: 0.2 
             }
         });
 
-        // Gemini guarantees perfectly structured JSON because of the config above
         return JSON.parse(response.text);
 
     } catch (error) {
         console.error("❌ Error processing with Gemini:", error);
         return null;
     }
+}
+
+async function downloadMetaMedia(mediaId) {
+    const META_TOKEN = process.env.META_ACCESS_TOKEN;
+    
+    // 1. Get the media URL from Meta
+    const urlRes = await axios.get(`https://graph.facebook.com/v18.0/${mediaId}`, {
+        headers: { Authorization: `Bearer ${META_TOKEN}` }
+    });
+    
+    // 2. Download the binary data
+    const mediaRes = await axios.get(urlRes.data.url, {
+        headers: { Authorization: `Bearer ${META_TOKEN}` },
+        responseType: 'arraybuffer' // Crucial for audio/images
+    });
+    
+    return {
+        mimeType: urlRes.data.mime_type,
+        data: Buffer.from(mediaRes.data, 'binary').toString('base64') // Convert for Gemini
+    };
 }
 
 /**
@@ -123,16 +147,40 @@ const processIncomingMessage = async (rawPayload) => {
         if (messageType === 'text') {
             textContent = message.text?.body;
             
-            // --- NEW: Pass the text to Gemini before saving ---
-            aiAnalysis = await processMessageWithGemini(textContent);
+            aiAnalysis = await processMessageWithGemini(`Analyze this distress text: ${textContent}`);
             
             if (aiAnalysis) {
                 console.log("✅ Gemini Analysis Complete:", aiAnalysis);
-                // Optional: You can also update the contact's overall urgency level here
-                // contact.urgency = aiAnalysis.urgency; 
-                // await contact.save();
+                const autoReply = `🚨 *Automated System:* We have classified your report as a ${aiAnalysis.urgency} ${aiAnalysis.category} incident. Rescue coordinators are reviewing your situation now.`;
+                await sendWhatsAppMessage(phoneNumber, autoReply);
             }
 
+        } else if (messageType === 'audio' || messageType === 'image') {
+            const mediaId = messageType === 'audio' ? message.audio.id : message.image.id;
+            
+            console.log(`📥 Downloading ${messageType} from Meta...`);
+            const mediaData = await downloadMetaMedia(mediaId);
+            
+            // Format media payload for Gemini SDK
+            const mediaPart = {
+                inlineData: {
+                    data: mediaData.data,
+                    mimeType: mediaData.mimeType
+                }
+            };
+
+            aiAnalysis = await processMessageWithGemini([
+                mediaPart, 
+                `Analyze this ${messageType} distress report. Extract the emergency details into the required JSON fields.`
+            ]);
+
+            if (aiAnalysis) {
+                console.log(`✅ Gemini ${messageType} Analysis Complete:`, aiAnalysis);
+                textContent = `[Attached ${messageType} analyzed by AI: ${aiAnalysis.summary}]`;
+                
+                const autoReply = `🚨 *Automated System:* We received your ${messageType}. Classified as a ${aiAnalysis.urgency} ${aiAnalysis.category} incident. Help is being coordinated.`;
+                await sendWhatsAppMessage(phoneNumber, autoReply);
+            }
         } else if (messageType === 'location') {
             locationData = {
                 latitude: message.location?.latitude,
@@ -148,6 +196,14 @@ const processIncomingMessage = async (rawPayload) => {
             console.log(`📍 Updated last known location for ${phoneNumber}`);
             
             const replyText = "🚨 We have successfully received your coordinates. Rescue teams have been notified and are actively monitoring your location. If you move, please share your location again.";
+            await sendWhatsAppMessage(phoneNumber, replyText);
+        }else {
+            // --- NEW: Fallback for Documents, Videos, Stickers, etc. ---
+            console.log(`⚠️ Received unsupported message type: ${messageType}`);
+            
+            textContent = `[Received unsupported file type: ${messageType}]`;
+            
+            const replyText = `🚨 *Automated System:* We cannot process ${messageType} files. Please send a text message, a voice note, or a photo describing your emergency.`;
             await sendWhatsAppMessage(phoneNumber, replyText);
         }
 

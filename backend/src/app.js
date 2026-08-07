@@ -7,7 +7,7 @@ import cookieParser from 'cookie-parser';
 import whatsappRoutes from './routes/whatsapp.routes.js';
 import contactRouter from './routes/contact.routes.js';
 import messageRouter from './routes/message.routes.js';
-
+import authRouter from './routes/auth.routes.js';
 import { ApiResponse } from './utils/ApiResponse.js';
 
 const app = express();
@@ -34,7 +34,7 @@ app.use('/api/v1/whatsapp', whatsappRoutes);
 // Dashboard API Routes
 app.use('/api/v1/contacts', contactRouter);
 app.use('/api/v1/messages', messageRouter);
-
+app.use('/api/v1/auth', authRouter);
 // Health Check Route
 app.get('/health', (req, res) => {
     res.status(200).json(
