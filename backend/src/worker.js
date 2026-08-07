@@ -6,9 +6,13 @@ import amqp from 'amqplib';
 import { connectDB } from './database/db.js'; 
 import { Contact } from './models/contact.model.js';
 import { Message } from './models/message.model.js';
-
-// --- NEW: Import the official Google Gen AI SDK ---
 import { GoogleGenAI } from '@google/genai';
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:3000');
+socket.on('connect', () => {
+  console.log('⚡ Worker connected to main Socket.io server!');
+});
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost';
 const QUEUE_NAME = 'whatsapp_messages';
@@ -153,7 +157,12 @@ const processIncomingMessage = async (rawPayload) => {
         });
 
         console.log(`💾 Saved message (${messageType}) from ${phoneNumber} to MongoDB! ID: ${savedMessage._id}`);
-
+        
+        socket.emit('worker:new_message', {
+            contact,
+            message: savedMessage,
+            aiAnalysis
+        });
     } catch (error) {
         console.error('❌ Error processing message payload:', error.message);
         throw error;
