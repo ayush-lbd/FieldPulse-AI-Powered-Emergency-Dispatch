@@ -21,6 +21,12 @@ const messageSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    aiAnalysis: {
+        category: { type: String },
+        urgency: { type: String, enum: ['Low', 'Medium', 'High', 'Critical'] },
+        location: { type: String },
+        summary: { type: String }
+    },
     locationData: {
         latitude: { type: Number },
         longitude: { type: Number }
