@@ -24,7 +24,7 @@ io.on('connection', (socket) => {
 
     // Listener for events sent by worker.js when a message is processed
     socket.on('worker:new_message', (data) => {
-        console.log(`⚡ Relaying new message event for Contact: ${data.contact?.phoneNumber}`);
+        console.log(` Relaying new message event for Contact: ${data.contact?.phoneNumber}`);
         // Broadcasts real-time data to all open React frontend dashboards
         io.emit('dashboard:new_message', data);
     });
@@ -35,7 +35,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`❌ Client disconnected: ${socket.id}`);
+        console.log(` Client disconnected: ${socket.id}`);
     });
 });
 
@@ -43,7 +43,7 @@ io.on('connection', (socket) => {
 connectDB()
     .then(() => {
         server.listen(PORT, () => {
-            console.log(`🚀 Server with Socket.io is listening on port ${PORT}`);
+            console.log(` Server with Socket.io is listening on port ${PORT}`);
         });
     })
     .catch((err) => {

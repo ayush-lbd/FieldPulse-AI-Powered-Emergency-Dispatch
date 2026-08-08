@@ -12,9 +12,10 @@ import axios from 'axios';
 import { uploadToCloudinary } from './utils/cloudinary.js';
 import { connectRedis, redisClient } from './utils/redis.js';
 
-const socket = io('http://localhost:3000');
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
+const socket = io(SERVER_URL);
 socket.on('connect', () => {
-  console.log('⚡ Worker connected to main Socket.io server!');
+  console.log(' Worker connected to main Socket.io server!');
 });
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost';
@@ -50,7 +51,7 @@ const responseSchema = {
 // --- NEW: The core AI processing function ---
 // --- NEW: Updated AI Processing Function for Text, Audio, and Images ---
 async function processMessageWithGemini(contentsInput) {
-    console.log(`🧠 Sending content to Gemini...`);
+    console.log(` Sending content to Gemini...`);
 
     const systemInstruction = `
         You are a highly trained disaster management AI. 
@@ -76,7 +77,7 @@ async function processMessageWithGemini(contentsInput) {
         return JSON.parse(response.text);
 
     } catch (error) {
-        console.error("❌ Error processing with Gemini:", error);
+        console.error(" Error processing with Gemini:", error);
         return null;
     }
 }
@@ -146,7 +147,7 @@ const processIncomingMessage = async (rawPayload) => {
         const contactInfo = changes?.contacts?.[0];
 
         if (!message) {
-            console.log('ℹ️ Received webhook update without user message content. Skipping.');
+            console.log(' Received webhook update without user message content. Skipping.');
             return;
         }
 
@@ -165,13 +166,13 @@ const processIncomingMessage = async (rawPayload) => {
                 profileName,
                 rescueStatus: 'pending'
             });
-            console.log(`👤 Created new contact record for: ${phoneNumber}`);
+            console.log(` Created new contact record for: ${phoneNumber}`);
         }
         else if (contact.rescueStatus === 'safe') {
             // Repeat victim facing a NEW danger! Reset their status to alert dispatchers.
             contact.rescueStatus = 'pending';
             await contact.save();
-            console.log(`🚨 Status reset to PENDING for repeat contact: ${phoneNumber}`);
+            console.log(` Status reset to PENDING for repeat contact: ${phoneNumber}`);
         }
 
         // 2. Prepare message fields
@@ -188,12 +189,12 @@ const processIncomingMessage = async (rawPayload) => {
         } else if (messageType === 'audio' || messageType === 'image') {
             const mediaId = messageType === 'audio' ? message.audio.id : message.image.id;
             
-            console.log(`📥 Downloading ${messageType} from Meta...`);
+            console.log(` Downloading ${messageType} from Meta...`);
             const mediaData = await downloadMetaMedia(mediaId);
             
-            console.log(`☁️ Uploading ${messageType} to Cloudinary...`);
+            console.log(` Uploading ${messageType} to Cloudinary...`);
             mediaUrl = await uploadToCloudinary(mediaData.data, mediaData.mimeType, messageType);
-            console.log(`✅ Uploaded to Cloudinary: ${mediaUrl}`);
+            console.log(` Uploaded to Cloudinary: ${mediaUrl}`);
 
             const mediaPart = {
                 inlineData: {
@@ -208,7 +209,7 @@ const processIncomingMessage = async (rawPayload) => {
             ]);
 
             if (aiAnalysis) {
-                console.log(`✅ Gemini ${messageType} Analysis Complete:`, aiAnalysis);
+                console.log(` Gemini ${messageType} Analysis Complete:`, aiAnalysis);
                 textContent = `[Attached ${messageType} analyzed by AI: ${aiAnalysis.summary}]`;
             }
         } else if (messageType === 'location') {
@@ -223,17 +224,17 @@ const processIncomingMessage = async (rawPayload) => {
                 updatedAt: messageTimestamp
             };
             await contact.save();
-            console.log(`📍 Updated last known location for ${phoneNumber}`);
+            console.log(` Updated last known location for ${phoneNumber}`);
             
-            const replyText = "🚨 We have successfully received your coordinates. Rescue teams have been notified and are actively monitoring your location. If you move, please share your location again.";
+            const replyText = " We have successfully received your coordinates. Rescue teams have been notified and are actively monitoring your location. If you move, please share your location again.";
             await sendWhatsAppMessage(phoneNumber, replyText);
         } else {
             // Fallback for Documents, Videos, Stickers, etc.
-            console.log(`⚠️ Received unsupported message type: ${messageType}`);
+            console.log(` Received unsupported message type: ${messageType}`);
             
             textContent = `[Received unsupported file type: ${messageType}]`;
             
-            const replyText = `🚨 *Automated System:* We cannot process ${messageType} files. Please send a text message, a voice note, or a photo describing your emergency.`;
+            const replyText = ` *Automated System:* We cannot process ${messageType} files. Please send a text message, a voice note, or a photo describing your emergency.`;
             await sendWhatsAppMessage(phoneNumber, replyText);
         }
 
@@ -242,17 +243,17 @@ const processIncomingMessage = async (rawPayload) => {
             const { isDuplicate, count } = await checkAndSetIncidentState(phoneNumber, aiAnalysis.urgency);
 
             if (isDuplicate) {
-                console.log(`⚠️ Repeat message detected from ${phoneNumber} (Message #${count} in session). Deduplicating response.`);
+                console.log(` Repeat message detected from ${phoneNumber} (Message #${count} in session). Deduplicating response.`);
                 textContent = `[Follow-up Report #${count}] ${textContent || aiAnalysis.summary}`;
                 
                 // Optional: Send throttled confirmation back to victim every 3 messages
                 if (count % 3 === 0) {
-                    const spamReply = `🚨 *Automated System:* We have received ${count} updates from you. Emergency services have already been notified. Please stay safe.`;
+                    const spamReply = ` *Automated System:* We have received ${count} updates from you. Emergency services have already been notified. Please stay safe.`;
                     await sendWhatsAppMessage(phoneNumber, spamReply);
                 }
             } else {
                 // First-time message in this 10-minute session: Send primary automated response
-                const autoReply = `🚨 *Automated System:* We received your ${messageType}. Classified as a ${aiAnalysis.urgency} ${aiAnalysis.category} incident. Help is being coordinated.`;
+                const autoReply = ` *Automated System:* We received your ${messageType}. Classified as a ${aiAnalysis.urgency} ${aiAnalysis.category} incident. Help is being coordinated.`;
                 await sendWhatsAppMessage(phoneNumber, autoReply);
             }
         }
@@ -269,7 +270,7 @@ const processIncomingMessage = async (rawPayload) => {
             timestamp: messageTimestamp
         });
 
-        console.log(`💾 Saved message (${messageType}) from ${phoneNumber} to MongoDB! ID: ${savedMessage._id}`);
+        console.log(` Saved message (${messageType}) from ${phoneNumber} to MongoDB! ID: ${savedMessage._id}`);
         
         socket.emit('worker:new_message', {
             contact,
@@ -277,7 +278,7 @@ const processIncomingMessage = async (rawPayload) => {
             aiAnalysis
         });
     } catch (error) {
-        console.error('❌ Error processing message payload:', error.message);
+        console.error(' Error processing message payload:', error.message);
         throw error;
     }
 };
@@ -294,7 +295,7 @@ async function startWorker() {
         const channel = await connection.createChannel();
 
         await channel.assertQueue(QUEUE_NAME, { durable: true });
-        console.log('👷 Worker running! Awaiting queued messages...');
+        console.log(' Worker running! Awaiting queued messages...');
 
         channel.consume(QUEUE_NAME, async (msg) => {
             if (msg !== null) {
@@ -305,13 +306,13 @@ async function startWorker() {
 
                     channel.ack(msg);
                 } catch (err) {
-                    console.error('❌ Processing failed:', err.message);
+                    console.error(' Processing failed:', err.message);
                 }
             }
         }, { noAck: false });
 
     } catch (error) {
-        console.error('❌ Worker failed to start:', error);
+        console.error(' Worker failed to start:', error);
     }
 }
 

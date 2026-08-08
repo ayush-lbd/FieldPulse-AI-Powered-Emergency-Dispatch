@@ -40,11 +40,11 @@ export const sendWhatsAppMessage = async (recipientNumber, messageText) => {
             throw new Error(data.error?.message || 'Failed to send Meta message');
         }
 
-        console.log(`\n📤 [Meta API] Successfully sent automated reply to ${recipientNumber}`);
+        console.log(`\n [Meta API] Successfully sent automated reply to ${recipientNumber}`);
         return data;
 
     } catch (error) {
-        console.error('\n❌ [Meta API Error]:', error.message);
+        console.error('\n [Meta API Error]:', error.message);
         // We do not throw the error here so that a failed reply doesn't crash the worker
     }
 };

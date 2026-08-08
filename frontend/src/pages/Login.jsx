@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Activity, Lock } from 'lucide-react';
 import axios from 'axios';
 
+const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,7 +17,7 @@ export default function Login() {
     
     try {
       // 1. Send credentials to your Express Auth Controller
-      const res = await axios.post('http://localhost:3000/api/v1/auth/login', {
+      const res = await axios.post(`${API_URL}/api/v1/auth/login`, {
         email,
         password
       }, {

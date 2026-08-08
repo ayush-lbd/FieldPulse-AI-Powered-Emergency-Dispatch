@@ -15,7 +15,7 @@ export const verifyWebhook = asyncHandler(async (req, res) => {
     const challenge = req.query['hub.challenge'];
 
     if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-        console.log("✅ Webhook verified successfully by Meta!");
+        console.log(" Webhook verified successfully by Meta!");
         // Send raw challenge string back to Meta as requested
         return res.status(200).send(challenge);
     }

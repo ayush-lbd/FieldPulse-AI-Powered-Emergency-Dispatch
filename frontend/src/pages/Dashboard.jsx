@@ -3,11 +3,15 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { AlertCircle, CheckCircle, Truck, Send, Users, MapPin, MessageSquare, Clock, Phone, X ,LogOut} from 'lucide-react';
+import { AlertCircle, CheckCircle, Truck, Send, Users, MapPin, MessageSquare, Clock, Phone, X, LogOut } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const socket = io('http://localhost:3000');
+// --- NEW: Dynamic API URL for deployment ---
+const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
+// --- UPDATED: Socket connection uses dynamic URL ---
+const socket = io(API_URL, { withCredentials: true });
 
 const getColoredPin = (status) => {
   let color = 'green';
@@ -45,12 +49,10 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const defaultCenter = [25.5941, 85.1376];
 
-  // 1. FIXED: Initial Data Fetch (Runs ONLY once when the app loads)
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
-  // 2. FIXED: Socket Listeners (Runs independently when a live event happens)
   useEffect(() => {
     socket.on('dashboard:new_message', (data) => {
       fetchDashboardData();
@@ -69,7 +71,6 @@ export default function Dashboard() {
     };
   }, [selectedContact]);
 
-  // 3. Fetch messages when a contact is selected
   useEffect(() => {
     if (selectedContact) {
       fetchMessages(selectedContact._id);
@@ -78,31 +79,29 @@ export default function Dashboard() {
   
   const handleLogout = async () => {
     try {
-      // 1. Tell the backend to clear the httpOnly cookies
-      await axios.post('http://localhost:3000/api/v1/auth/logout', {}, {
+      // --- UPDATED: Use API_URL ---
+      await axios.post(`${API_URL}/api/v1/auth/logout`, {}, {
         withCredentials: true
       });
     } catch (error) {
       console.error("Error during backend logout:", error);
     } finally {
-      // 2. Clear the frontend token so ProtectedRoute kicks you out
       localStorage.removeItem('fieldPulseToken');
-      // 3. Redirect back to the public landing page
       navigate('/');
     }
   };
 
   const fetchDashboardData = async () => {
     try {
+      // --- UPDATED: Use API_URL ---
       const [contactsRes, statsRes] = await Promise.all([
-        axios.get('http://localhost:3000/api/v1/contacts'),
-        axios.get('http://localhost:3000/api/v1/contacts/stats')
+        axios.get(`${API_URL}/api/v1/contacts`),
+        axios.get(`${API_URL}/api/v1/contacts/stats`)
       ]);
       const latestContacts = contactsRes.data.data;
       setContacts(latestContacts);
       setStats(statsRes.data.data);
 
-      // Update the open panel with the freshest data (No more infinite loops!)
       setSelectedContact((currentSnapshot) => {
         if (!currentSnapshot) return null;
         const freshContact = latestContacts.find(c => c._id === currentSnapshot._id);
@@ -116,7 +115,8 @@ export default function Dashboard() {
 
   const fetchMessages = async (contactId) => {
     try {
-      const res = await axios.get(`http://localhost:3000/api/v1/messages/${contactId}`);
+      // --- UPDATED: Use API_URL ---
+      const res = await axios.get(`${API_URL}/api/v1/messages/${contactId}`);
       setContactMessages(res.data.data.reverse());
     } catch (error) {
       console.error("Error fetching messages:", error);
@@ -129,15 +129,12 @@ export default function Dashboard() {
     setIsUpdating(true); 
     
     try {
-      // 1. Tell the database to update via the Express API
-      await axios.patch(`http://localhost:3000/api/v1/contacts/${selectedContact._id}/status`, {
+      // --- UPDATED: Use API_URL ---
+      await axios.patch(`${API_URL}/api/v1/contacts/${selectedContact._id}/status`, {
         rescueStatus: newStatus
       });
       
-      // 2. Alert the Socket.io server so it can update any OTHER dispatchers' screens
       socket.emit('dispatcher:status_updated', { _id: selectedContact._id, rescueStatus: newStatus });
-
-      // 3. Instantly fetch the fresh data to update OUR screen
       await fetchDashboardData();
       
     } catch (error) {
@@ -153,15 +150,14 @@ export default function Dashboard() {
 
     setIsSendingReply(true);
     try {
-      const res = await axios.post(`http://localhost:3000/api/v1/messages/${selectedContact._id}/reply`, 
+      // --- UPDATED: Use API_URL ---
+      const res = await axios.post(`${API_URL}/api/v1/messages/${selectedContact._id}/reply`, 
         { text: replyText },
         { withCredentials: true }
       );
       
-      // Because we reversed the array earlier to show newest at the top,
-      // we inject the new message at the beginning of the array [0] index.
       setContactMessages(prev => [res.data.data, ...prev]);
-      setReplyText(''); // Clear the input box
+      setReplyText('');
       
     } catch (error) {
       console.error("Error sending manual reply:", error);
@@ -188,7 +184,6 @@ export default function Dashboard() {
             <StatBadge icon={<CheckCircle size={18}/>} label="Safe" count={stats.safe} color="bg-green-100 text-green-800" />
           </div>
 
-          {/* --- NEW: Logout Button --- */}
           <button 
             onClick={handleLogout}
             className="flex items-center space-x-1 bg-red-50 text-red-600 px-3 py-2 rounded-lg font-semibold hover:bg-red-100 transition text-sm border border-red-200"
@@ -294,7 +289,6 @@ export default function Dashboard() {
                     </span>
                   </div>
                   
-                  {/* --- NEW: Image Renderer --- */}
                   {msg.messageType === 'image' && msg.mediaUrl && (
                     <div className="mt-2 mb-3">
                       <img 
@@ -305,7 +299,6 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  {/* --- NEW: Audio Player Renderer --- */}
                   {msg.messageType === 'audio' && msg.mediaUrl && (
                     <div className="mt-2 mb-3">
                       <audio 
@@ -315,7 +308,6 @@ export default function Dashboard() {
                       />
                     </div>
                   )}
-                  {/* --- END NEW --- */}
 
                   {msg.textContent && <p className="text-gray-800 text-sm">{msg.textContent}</p>}
                   {msg.locationData?.latitude && <p className="text-blue-600 text-xs mt-1">📍 Location Pinned</p>}
@@ -353,7 +345,6 @@ export default function Dashboard() {
           </section>
         )}
 
-           
         {/* 🗺️ MAIN AREA: Live Map */}
         <main className="flex-1 relative bg-gray-200">
           <MapContainer center={defaultCenter} zoom={7} className="w-full h-full z-0">
