@@ -21,6 +21,10 @@ const messageSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    mediaUrl: { 
+        type: String, 
+        default: null
+    },
     aiAnalysis: {
         category: { type: String },
         urgency: { type: String, enum: ['Low', 'Medium', 'High', 'Critical'] },

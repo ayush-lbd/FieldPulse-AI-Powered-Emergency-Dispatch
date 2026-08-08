@@ -9,6 +9,8 @@ import { Message } from './models/message.model.js';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import axios from 'axios';
+import { uploadToCloudinary } from './utils/cloudinary.js';
+
 
 const socket = io('http://localhost:3000');
 socket.on('connect', () => {
@@ -142,7 +144,8 @@ const processIncomingMessage = async (rawPayload) => {
         // 2. Prepare message fields
         let textContent = null;
         let locationData = null;
-        let aiAnalysis = null; // --- NEW: Variable to hold Gemini's JSON output ---
+        let aiAnalysis = null; 
+        let mediaUrl = null;
 
         if (messageType === 'text') {
             textContent = message.text?.body;
@@ -162,6 +165,10 @@ const processIncomingMessage = async (rawPayload) => {
             const mediaData = await downloadMetaMedia(mediaId);
             
             // Format media payload for Gemini SDK
+            console.log(`☁️ Uploading ${messageType} to Cloudinary...`);
+            mediaUrl = await uploadToCloudinary(mediaData.data, mediaData.mimeType, messageType);
+            console.log(`✅ Uploaded to Cloudinary: ${mediaUrl}`);
+
             const mediaPart = {
                 inlineData: {
                     data: mediaData.data,
@@ -214,7 +221,8 @@ const processIncomingMessage = async (rawPayload) => {
             messageType,
             textContent,
             locationData,
-            aiAnalysis, // --- NEW: Attach the structured JSON directly to the message! ---
+            mediaUrl,
+            aiAnalysis, 
             timestamp: messageTimestamp
         });
 

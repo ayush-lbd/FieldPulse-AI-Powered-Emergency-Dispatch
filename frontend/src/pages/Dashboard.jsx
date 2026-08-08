@@ -294,6 +294,29 @@ export default function Dashboard() {
                     </span>
                   </div>
                   
+                  {/* --- NEW: Image Renderer --- */}
+                  {msg.messageType === 'image' && msg.mediaUrl && (
+                    <div className="mt-2 mb-3">
+                      <img 
+                        src={msg.mediaUrl} 
+                        alt="Disaster visual reported by citizen" 
+                        className="rounded-lg max-h-64 object-cover border border-gray-200"
+                      />
+                    </div>
+                  )}
+
+                  {/* --- NEW: Audio Player Renderer --- */}
+                  {msg.messageType === 'audio' && msg.mediaUrl && (
+                    <div className="mt-2 mb-3">
+                      <audio 
+                        controls 
+                        src={msg.mediaUrl} 
+                        className="w-full h-10"
+                      />
+                    </div>
+                  )}
+                  {/* --- END NEW --- */}
+
                   {msg.textContent && <p className="text-gray-800 text-sm">{msg.textContent}</p>}
                   {msg.locationData?.latitude && <p className="text-blue-600 text-xs mt-1">📍 Location Pinned</p>}
 
