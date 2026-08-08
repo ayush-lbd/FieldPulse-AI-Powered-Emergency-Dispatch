@@ -10,7 +10,7 @@ import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import axios from 'axios';
 import { uploadToCloudinary } from './utils/cloudinary.js';
-
+import { connectRedis, redisClient } from './utils/redis.js';
 
 const socket = io('http://localhost:3000');
 socket.on('connect', () => {
@@ -101,6 +101,39 @@ async function downloadMetaMedia(mediaId) {
     };
 }
 
+async function checkAndSetIncidentState(phoneNumber, urgency) {
+    const sessionKey = `active_session:${phoneNumber}`;
+    
+    // Check if there is an active session in Redis
+    const existingSession = await redisClient.get(sessionKey);
+    
+    if (existingSession) {
+        const parsed = JSON.parse(existingSession);
+        const updatedCount = parsed.count + 1;
+        
+        // Update session in Redis, maintaining remaining TTL
+        await redisClient.set(sessionKey, JSON.stringify({
+            count: updatedCount,
+            lastUrgency: urgency,
+            updatedAt: new Date()
+        }), { KEEPTTL: true });
+
+        return { isDuplicate: true, count: updatedCount };
+    }
+
+    // New incident: set active session with 10-minute (600s) TTL window
+    await redisClient.set(sessionKey, JSON.stringify({
+        count: 1,
+        lastUrgency: urgency,
+        updatedAt: new Date()
+    }), { EX: 600 });
+
+    // Track in active incidents set
+    await redisClient.sAdd('active_incidents', phoneNumber);
+
+    return { isDuplicate: false, count: 1 };
+}
+
 /**
  * Async Message Processor
  * Extracts incoming data, updates/creates the Contact, and saves the Message to MongoDB.
@@ -151,12 +184,6 @@ const processIncomingMessage = async (rawPayload) => {
             textContent = message.text?.body;
             
             aiAnalysis = await processMessageWithGemini(`Analyze this distress text: ${textContent}`);
-            
-            if (aiAnalysis) {
-                console.log("✅ Gemini Analysis Complete:", aiAnalysis);
-                const autoReply = `🚨 *Automated System:* We have classified your report as a ${aiAnalysis.urgency} ${aiAnalysis.category} incident. Rescue coordinators are reviewing your situation now.`;
-                await sendWhatsAppMessage(phoneNumber, autoReply);
-            }
 
         } else if (messageType === 'audio' || messageType === 'image') {
             const mediaId = messageType === 'audio' ? message.audio.id : message.image.id;
@@ -164,7 +191,6 @@ const processIncomingMessage = async (rawPayload) => {
             console.log(`📥 Downloading ${messageType} from Meta...`);
             const mediaData = await downloadMetaMedia(mediaId);
             
-            // Format media payload for Gemini SDK
             console.log(`☁️ Uploading ${messageType} to Cloudinary...`);
             mediaUrl = await uploadToCloudinary(mediaData.data, mediaData.mimeType, messageType);
             console.log(`✅ Uploaded to Cloudinary: ${mediaUrl}`);
@@ -184,9 +210,6 @@ const processIncomingMessage = async (rawPayload) => {
             if (aiAnalysis) {
                 console.log(`✅ Gemini ${messageType} Analysis Complete:`, aiAnalysis);
                 textContent = `[Attached ${messageType} analyzed by AI: ${aiAnalysis.summary}]`;
-                
-                const autoReply = `🚨 *Automated System:* We received your ${messageType}. Classified as a ${aiAnalysis.urgency} ${aiAnalysis.category} incident. Help is being coordinated.`;
-                await sendWhatsAppMessage(phoneNumber, autoReply);
             }
         } else if (messageType === 'location') {
             locationData = {
@@ -204,14 +227,34 @@ const processIncomingMessage = async (rawPayload) => {
             
             const replyText = "🚨 We have successfully received your coordinates. Rescue teams have been notified and are actively monitoring your location. If you move, please share your location again.";
             await sendWhatsAppMessage(phoneNumber, replyText);
-        }else {
-            // --- NEW: Fallback for Documents, Videos, Stickers, etc. ---
+        } else {
+            // Fallback for Documents, Videos, Stickers, etc.
             console.log(`⚠️ Received unsupported message type: ${messageType}`);
             
             textContent = `[Received unsupported file type: ${messageType}]`;
             
             const replyText = `🚨 *Automated System:* We cannot process ${messageType} files. Please send a text message, a voice note, or a photo describing your emergency.`;
             await sendWhatsAppMessage(phoneNumber, replyText);
+        }
+
+        // --- NEW: STEP 3 - REDIS DEDUPLICATION & AUTOMATED REPLY ---
+        if (aiAnalysis) {
+            const { isDuplicate, count } = await checkAndSetIncidentState(phoneNumber, aiAnalysis.urgency);
+
+            if (isDuplicate) {
+                console.log(`⚠️ Repeat message detected from ${phoneNumber} (Message #${count} in session). Deduplicating response.`);
+                textContent = `[Follow-up Report #${count}] ${textContent || aiAnalysis.summary}`;
+                
+                // Optional: Send throttled confirmation back to victim every 3 messages
+                if (count % 3 === 0) {
+                    const spamReply = `🚨 *Automated System:* We have received ${count} updates from you. Emergency services have already been notified. Please stay safe.`;
+                    await sendWhatsAppMessage(phoneNumber, spamReply);
+                }
+            } else {
+                // First-time message in this 10-minute session: Send primary automated response
+                const autoReply = `🚨 *Automated System:* We received your ${messageType}. Classified as a ${aiAnalysis.urgency} ${aiAnalysis.category} incident. Help is being coordinated.`;
+                await sendWhatsAppMessage(phoneNumber, autoReply);
+            }
         }
 
         // 3. Save the Message document linked via contactId
@@ -245,6 +288,7 @@ const processIncomingMessage = async (rawPayload) => {
 async function startWorker() {
     try {
         await connectDB();
+        await connectRedis();
 
         const connection = await amqp.connect(RABBITMQ_URL);
         const channel = await connection.createChannel();
